@@ -89,7 +89,7 @@ HASH_TO_ARGS = {
       :sport => ["7061","7062"],
       :table => "filter",
     },  
-    :args => ["-t", :filter, "-s", "1.1.1.1", "-d", "2.10.13.3/24", "-p", :udp, "-m", "multiport", "--sports", "7061,7062", "-m", "multiport", "--dports", "7061", "-m", "comment", "--comment", "700 allow bar", "-j", "my_custom_chain"],
+    :args => ["-t", :filter, "-s", "1.1.1.1", "-d", "2.10.13.3/24", "-p", :udp, "-m", "multiport", "--sports", "7061,7062", "--dport", "7061", "-m", "comment", "--comment", "700 allow bar", "-j", "my_custom_chain"],
   },  
   'no_action' => {
     :params => {

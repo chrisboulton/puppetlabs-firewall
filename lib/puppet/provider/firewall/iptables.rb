@@ -1,9 +1,10 @@
 require 'puppet/provider/firewall'
 require 'digest/md5'
+require 'csv'
 
 Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Firewall do
   include Puppet::Util::Firewall
-  
+
   @doc = "Iptables type provider"
 
   has_feature :iptables
@@ -25,29 +26,48 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
   @resource_map = {
     :burst => "--limit-burst",
     :destination => "-d",
-    :dport => "-m multiport --dports",
-    :icmp => "-m icmp --icmp-type",
+    :dport => "--dports",
+    :icmp => "--icmp-type",
     :iniface => "-i",
     :jump => "-j",
     :limit => "--limit",
     :log_level => "--log-level",
     :log_prefix => "--log-prefix",
-    :name => "-m comment --comment",
+    :name => "--comment",
     :outiface => "-o",
     :proto => "-p",
     :reject => "--reject-with",
     :source => "-s",
-    :state => "-m state --state",
-    :sport => "-m multiport --sports",
+    :state => "--state",
+    :sport => "--sports",
     :table => "-t",
     :todest => "--to-destination",
     :toports => "--to-ports",
     :tosource => "--to-source",
   }
 
-  @resource_list = [:table, :source, :destination, :iniface, :outiface, 
-    :proto, :sport, :dport, :name, :state, :icmp, :limit, :burst, :jump, 
+  @resource_list = [:table, :source, :destination, :iniface, :outiface,
+    :proto, :sport, :dport, :name, :state, :icmp, :limit, :burst, :jump,
     :todest, :tosource, :toports, :log_level, :log_prefix, :reject]
+
+  @singular_ports = {
+    :dport => '--dport',
+    :sport => '--sport',
+  }
+
+  @resource_modules = {
+    :name      => :comment,
+    :state     => :state,
+    :icmp_type => :icmp_type,
+    :dport     => lambda { |v|
+      return :multiport if v.to_a.length > 1
+    },
+    :sport     => lambda { |v|
+      return :multiport if v.to_a.length > 1
+    },
+  }
+
+  @resources_by_arg = @resource_map.invert.merge(@singular_ports.invert)
 
   def insert
     debug 'Inserting rule %s' % resource[:name]
@@ -56,7 +76,7 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
 
   def update
     debug 'Updating rule %s' % resource[:name]
-    iptables update_args 
+    iptables update_args
   end
 
   def delete
@@ -77,7 +97,7 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
     end
     @property_hash.clear
   end
-  
+
   def self.instances
     debug "[instances]"
     table = nil
@@ -103,20 +123,25 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
   def self.rule_to_hash(line, table, counter)
     hash = {}
     keys = []
-    values = line.dup
 
-    @resource_list.reverse.each do |k|
-      if values.slice!(/\s#{@resource_map[k]}/)
-        keys << k
+    values = CSV::parse_line(line, ' ')
+    values.each_slice(2) do |k, v|
+      # Ignore module references
+      next if k == '-m'
+
+      # Chains are handled manually
+      if k == '-A'
+        hash[:chain] = v
+        next
       end
+
+      # Unknown arguments should just be skipped over
+      next unless @resources_by_arg.has_key?(k)
+
+      sym = @resources_by_arg[k]
+      hash[sym] = v
     end
 
-    # Manually remove chain
-    values.slice!('-A')
-    keys << :chain
-
-    keys.zip(values.scan(/"[^"]*"|\S+/).reverse) { |f, v| hash[f] = v.gsub(/"/, '') }
-    
     [:dport, :sport, :state].each do |prop|
       hash[prop] = hash[prop].split(',') if ! hash[prop].nil?
     end
@@ -139,7 +164,7 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
     hash[:proto] = "all" if !hash.include?(:proto)
 
     # If the jump parameter is set to one of: ACCEPT, REJECT or DROP then
-    # we should set the action parameter instead. 
+    # we should set the action parameter instead.
     if ['ACCEPT','REJECT','DROP'].include?(hash[:jump]) then
       hash[:action] = hash[:jump].downcase
       hash.delete(:jump)
@@ -165,14 +190,14 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
   def delete_args
     count = []
     line = properties[:line].gsub(/\-A/, '-D').split
-    
+
     # Grab all comment indices
     line.each do |v|
       if v =~ /"/
         count << line.index(v)
       end
     end
-    
+
     if ! count.empty?
       # Remove quotes and set first comment index to full string
       line[count.first] = line[count.first..count.last].join(' ').gsub(/"/, '')
@@ -182,7 +207,7 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
         line[i] = nil
       end
     end
-    
+
     # Return array without nils
     line.compact
   end
@@ -191,8 +216,10 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
     debug "Current resource: %s" % resource.class
 
     args = []
-    resource_list = self.class.instance_variable_get('@resource_list')
     resource_map = self.class.instance_variable_get('@resource_map')
+    resource_list = self.class.instance_variable_get('@resource_list')
+    resource_modules = self.class.instance_variable_get('@resource_modules')
+    singular_ports = self.class.instance_variable_get('@singular_ports')
 
     resource_list.each do |res|
       resource_value = nil
@@ -205,7 +232,24 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
         next
       end
 
-      args << resource_map[res].split(' ')
+      if resource_modules.has_key?(res)
+        resource_module = resource_modules[res]
+        if resource_module.is_a?(Proc)
+          resource_module = resource_module.call(resource_value)
+        end
+        unless resource_module.nil?
+          args << ['-m', resource_module.to_s]
+        end
+      end
+
+      if singular_ports.has_key?(res) and resource_value.to_a.length == 1
+        resource_value = resource_value.to_s
+        arg = singular_ports[res]
+      else
+        arg = resource_map[res]
+      end
+
+      args << arg.split(' ')
 
       if resource_value.is_a?(Array)
         args << resource_value.join(',')
@@ -220,7 +264,7 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
   def insert_order
     debug("[insert_order]")
     rules = []
-    
+
     # Find list of current rules based on chain
     self.class.instances.each do |rule|
       rules << rule.name if rule.chain == resource[:chain].to_s

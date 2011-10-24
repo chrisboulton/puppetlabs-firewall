@@ -18,28 +18,47 @@ Puppet::Type.type(:firewall).provide :ip6tables, :parent => :iptables, :source =
   @resource_map = {
     :burst => "--limit-burst",
     :destination => "-d",
-    :dport => "-m multiport --dports",
-    :icmp => "-m icmp6 --icmpv6-type",
+    :dport => "--dports",
+    :icmp => "--icmpv6-type",
     :iniface => "-i",
     :jump => "-j",
     :limit => "--limit",
     :log_level => "--log-level",
     :log_prefix => "--log-prefix",
-    :name => "-m comment --comment",
+    :name => "--comment",
     :outiface => "-o",
     :proto => "-p",
     :reject => "--reject-with",
     :source => "-s",
-    :state => "-m state --state",
-    :sport => "-m multiport --sports",
+    :state => "--state",
+    :sport => "--sports",
     :table => "-t",
     :todest => "--to-destination",
     :toports => "--to-ports",
     :tosource => "--to-source",
   }
 
-  @resource_list = [:table, :source, :destination, :iniface, :outiface, 
-    :proto, :sport, :dport, :name, :state, :icmp, :limit, :burst, :jump, 
+  @resource_list = [:table, :source, :destination, :iniface, :outiface,
+    :proto, :sport, :dport, :name, :state, :icmp, :limit, :burst, :jump,
     :todest, :tosource, :toports, :log_level, :log_prefix, :reject]
+
+  @singular_ports = {
+    :dport => '--dport',
+    :sport => '--sport',
+  }
+
+  @resource_modules = {
+    :name      => :comment,
+    :state     => :state,
+    :icmp_type => :icmp_type,
+    :dport     => lambda { |v|
+      return :multiport if v.to_a.length > 1
+    },
+    :sport     => lambda { |v|
+      return :multiport if v.to_a.length > 1
+    },
+  }
+
+  @resources_by_arg = @resource_map.invert.merge(@singular_ports.invert)
 
 end
