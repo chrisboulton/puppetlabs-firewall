@@ -146,6 +146,18 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
       hash[prop] = hash[prop].split(',') if ! hash[prop].nil?
     end
 
+    # Our type prefers hyphens over colons for ranges so ...
+    # Iterate across all ports replacing colons with hyphens so that ranges match
+    # the types expectations.
+    [:dport, :sport].each do |prop|
+      next unless hash[prop]
+      hash[prop] = hash[prop].collect do |elem|
+        elem.gsub(/:/,'-')
+      end
+    end
+
+    # States should always be sorted. This ensures that the output from
+    # iptables-save and user supplied resources is consistent.
     hash[:state] = hash[:state].sort unless hash[:state].nil?
 
     # This forces all existing, commentless rules to be moved to the bottom of the stack.
@@ -252,6 +264,14 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
       end
 
       args << arg.split(' ')
+
+      # For sport and dport, convert hyphens to colons since the type
+      # expects hyphens for ranges of ports.
+      if [:sport, :dport].include?(res) then
+        resource_value = resource_value.collect do |elem|
+          elem.gsub(/-/, ':')
+        end
+      end
 
       if resource_value.is_a?(Array)
         args << resource_value.join(',')
