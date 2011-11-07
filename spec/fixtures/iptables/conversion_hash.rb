@@ -135,8 +135,6 @@ HASH_TO_ARGS = {
     :args => ["-t", :filter, "-p", :tcp, "-m", "comment", "--comment", 
       "100 no action"],
   },
-<<<<<<< HEAD
-=======
   'sport_range_1' => {
     :params => {
       :name => "100 sport range",
@@ -169,7 +167,6 @@ HASH_TO_ARGS = {
     },  
     :args => ["-t", :filter, "-p", :tcp, "-m", "multiport", "--dports", "15,512:1024", "-m", "comment", "--comment", "100 sport range"],
   },
->>>>>>> upstream/master
   'states_set_from_array' => {
     :params => {
       :name => "100 states_set_from_array",
@@ -178,9 +175,5 @@ HASH_TO_ARGS = {
     },
     :args => ["-t", :filter, "-p", :tcp, "-m", "comment", "--comment", "100 states_set_from_array",
       "-m", "state", "--state", "ESTABLISHED,INVALID"],
-<<<<<<< HEAD
-  }
-=======
   },
->>>>>>> upstream/master
 }
