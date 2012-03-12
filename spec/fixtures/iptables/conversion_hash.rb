@@ -210,7 +210,7 @@ HASH_TO_ARGS = {
       :sport => ["7061","7062"],
       :table => "filter",
     },
-    :args => ["-t", :filter, "-s", "1.1.1.1/32", "-d", "2.10.13.0/24", "-p", :udp, "-m", "multiport", "--sports", "7061,7062", "--dports", "7061", "-m", "comment", "--comment", "700 allow bar", "-j", "my_custom_chain"],
+    :args => ["-t", :filter, "-s", "1.1.1.1/32", "-d", "2.10.13.0/24", "-p", :udp, "-m", "multiport", "--sports", "7061,7062", "--dport", "7061", "-m", "comment", "--comment", "700 allow bar", "-j", "my_custom_chain"],
   },
   'no_action' => {
     :params => {
@@ -275,7 +275,7 @@ HASH_TO_ARGS = {
       :table => 'filter',
       :port => '80',
     },
-    :args => ['-t', :filter, '-p', :tcp, '-m', 'multiport', '--ports', '80', '-m', 'comment', '--comment', '001 port property'],
+    :args => ['-t', :filter, '-p', :tcp, '--port', '80', '-m', 'comment', '--comment', '001 port property'],
   },
   'log_level_debug' => {
     :params => {
@@ -304,7 +304,7 @@ HASH_TO_ARGS = {
       :dport => '123',
       :limit => '15/hour'
     },
-    :args => ['-t', :filter, '-p', :tcp, '-m', 'multiport', '--dports', '123', '-m', 'comment', '--comment', '057 INPUT limit NTP', '-m', 'limit', '--limit', '15/hour'],
+    :args => ['-t', :filter, '-p', :tcp, '--dport', '123', '-m', 'comment', '--comment', '057 INPUT limit NTP', '-m', 'limit', '--limit', '15/hour'],
   },
   'proto_ipencap' => {
     :params => {

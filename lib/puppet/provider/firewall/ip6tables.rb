@@ -29,7 +29,7 @@ Puppet::Type.type(:firewall).provide :ip6tables, :parent => :iptables, :source =
     :log_prefix => "--log-prefix",
     :name => "--comment",
     :outiface => "-o",
-    :port => '-m multiport --ports',
+    :port => '--ports',
     :proto => "-p",
     :reject => "--reject-with",
     :source => "-s",
@@ -53,12 +53,16 @@ Puppet::Type.type(:firewall).provide :ip6tables, :parent => :iptables, :source =
   @singular_ports = {
     :dport => '--dport',
     :sport => '--sport',
+    :port  => '--port',
   }
 
   @resource_modules = {
     :name      => :comment,
     :state     => :state,
     :icmp_type => :icmp_type,
+    :port      => lambda { |v|
+      return :multiport if v.to_a.length > 1
+    },
     :dport     => lambda { |v|
       return :multiport if v.to_a.length > 1
     },

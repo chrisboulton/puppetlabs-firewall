@@ -33,12 +33,12 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
     :gid => "--gid-owner",
     :iniface => "-i",
     :jump => "-j",
-    :limit => "-m limit --limit",
+    :limit => "--limit",
     :log_level => "--log-level",
     :log_prefix => "--log-prefix",
     :name => "--comment",
     :outiface => "-o",
-    :port => '-m multiport --ports',
+    :port => '--ports',
     :proto => "-p",
     :reject => "--reject-with",
     :source => "-s",
@@ -63,18 +63,25 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
   @singular_ports = {
     :dport => '--dport',
     :sport => '--sport',
+    :port  => '--port',
   }
 
   @resource_modules = {
     :name      => :comment,
     :state     => :state,
     :icmp_type => :icmp_type,
+    :port      => lambda { |v|
+      return :multiport if v.to_a.length > 1
+    },
     :dport     => lambda { |v|
       return :multiport if v.to_a.length > 1
     },
     :sport     => lambda { |v|
       return :multiport if v.to_a.length > 1
     },
+    :gid       => :owner,
+    :uid       => :owner,
+    :limit     => :limit,
   }
 
   @resources_by_arg = @resource_map.invert.merge(@singular_ports.invert)
@@ -151,8 +158,6 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
       sym = @resources_by_arg[k]
       hash[sym] = v
     end
-
-    keys.zip(values.scan(/"[^"]*"|\S+/).reverse) { |f, v| hash[f] = v.gsub(/"/, '') }
 
     [:dport, :sport, :port, :state].each do |prop|
       hash[prop] = hash[prop].split(',') if ! hash[prop].nil?
