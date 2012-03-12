@@ -36,14 +36,14 @@ Puppet::Type.type(:firewallchain).provide :iptables_chain do
   }
   InternalChains = /^(PREROUTING|POSTROUTING|BROUTING|INPUT|FORWARD|OUTPUT)$/
   Tables = 'nat|mangle|filter|raw|rawpost|broute'
-  Nameformat = /^(#{Tables}):(.+):(IP(v[46])?|ethernet)$/
+  Nameformat = /^(.+):(#{Tables}):(IP(v[46])?|ethernet)$/
 
   def create
     # can't create internal chains
     if @resource[:name] =~ InternalChains
       self.warn "Attempting to create internal chain #{@resource[:name]}"
     end
-    allvalidchains do |t, table, chain, protocol|
+    allvalidchains do |t, chain, table, protocol|
       if properties[:ensure] == protocol
         debug "Skipping Inserting chain #{chain} on table #{table} (#{protocol}) already exists"
       else
@@ -158,7 +158,7 @@ Puppet::Type.type(:firewallchain).provide :iptables_chain do
     table = $1
     chain = $2
     protocol = $3
-    yield Mapping[protocol.to_sym][:tables],table,chain,protocol.to_sym
+    yield Mapping[protocol.to_sym][:tables],chain,table,protocol.to_sym
   end
 
 end
