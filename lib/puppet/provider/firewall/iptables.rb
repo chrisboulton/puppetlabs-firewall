@@ -13,10 +13,12 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
   has_feature :dnat
   has_feature :interface_match
   has_feature :icmp_match
+  has_feature :owner
   has_feature :state_match
   has_feature :reject_type
   has_feature :log_level
   has_feature :log_prefix
+  has_feature :mark
 
   commands :iptables => '/sbin/iptables'
   commands :iptables_save => '/sbin/iptables-save'
@@ -28,13 +30,15 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
     :destination => "-d",
     :dport => "--dports",
     :icmp => "--icmp-type",
+    :gid => "--gid-owner",
     :iniface => "-i",
     :jump => "-j",
-    :limit => "--limit",
+    :limit => "-m limit --limit",
     :log_level => "--log-level",
     :log_prefix => "--log-prefix",
     :name => "--comment",
     :outiface => "-o",
+    :port => '-m multiport --ports',
     :proto => "-p",
     :reject => "--reject-with",
     :source => "-s",
@@ -44,11 +48,17 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
     :todest => "--to-destination",
     :toports => "--to-ports",
     :tosource => "--to-source",
+    :uid => "--uid-owner",
+    :set_mark => "--set-mark",
   }
 
+  # This is the order of resources as they appear in iptables-save output,
+  # we need it to properly parse and apply rules, if the order of resource
+  # changes between puppet runs, the changed rules will be re-applied again.
+  # This order can be determined by going through iptables source code or just tweaking and trying manually
   @resource_list = [:table, :source, :destination, :iniface, :outiface,
-    :proto, :sport, :dport, :name, :state, :icmp, :limit, :burst, :jump,
-    :todest, :tosource, :toports, :log_level, :log_prefix, :reject]
+    :proto, :gid, :uid, :sport, :dport, :port, :name, :state, :icmp, :limit, :burst,
+    :jump, :todest, :tosource, :toports, :log_level, :log_prefix, :reject, :set_mark]
 
   @singular_ports = {
     :dport => '--dport',
@@ -142,14 +152,16 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
       hash[sym] = v
     end
 
-    [:dport, :sport, :state].each do |prop|
+    keys.zip(values.scan(/"[^"]*"|\S+/).reverse) { |f, v| hash[f] = v.gsub(/"/, '') }
+
+    [:dport, :sport, :port, :state].each do |prop|
       hash[prop] = hash[prop].split(',') if ! hash[prop].nil?
     end
 
     # Our type prefers hyphens over colons for ranges so ...
     # Iterate across all ports replacing colons with hyphens so that ranges match
     # the types expectations.
-    [:dport, :sport].each do |prop|
+    [:dport, :sport, :port].each do |prop|
       next unless hash[prop]
       hash[prop] = hash[prop].collect do |elem|
         elem.gsub(/:/,'-')
@@ -165,6 +177,12 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
     # a rule in iptables does not have a comment. We get around this by appending a high level
     if ! hash[:name]
       hash[:name] = "9999 #{Digest::MD5.hexdigest(line)}"
+    end
+
+    # Iptables defaults to log_level '4', so it is omitted from the output of iptables-save.
+    # If the :jump value is LOG and you don't have a log-level set, we assume it to be '4'.
+    if hash[:jump] == 'LOG' && ! hash[:log_level]
+      hash[:log_level] = '4'
     end
 
     hash[:line] = line
@@ -267,7 +285,7 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
 
       # For sport and dport, convert hyphens to colons since the type
       # expects hyphens for ranges of ports.
-      if [:sport, :dport].include?(res) then
+      if [:sport, :dport, :port].include?(res) then
         resource_value = resource_value.collect do |elem|
           elem.gsub(/-/, ':')
         end

@@ -4,6 +4,12 @@ firewall { '000 allow foo':
   proto => "tcp",
 }
 
+firewall { '975 log test':
+  state => 'NEW',
+  log_level => 'panic',
+  jump => 'LOG'
+}
+
 firewall { '001 allow boo':
   action => accept,
   iniface => "eth0",
@@ -85,6 +91,19 @@ firewall { '055 INPUT allow DNS':
   action => accept,
   proto => 'udp',
   sport => 'domain'
+}
+
+firewall { '056 INPUT allow web in and out':
+  action => accept,
+  proto  => 'tcp',
+  port  => 80
+}
+
+firewall { '057 INPUT limit NTP':
+  action => accept,
+  proto  => 'tcp',
+  dport  => ntp,
+  limit  => '15/hour'
 }
 
 firewall { '999 FORWARD drop':

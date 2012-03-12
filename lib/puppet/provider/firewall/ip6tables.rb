@@ -7,6 +7,7 @@ Puppet::Type.type(:firewall).provide :ip6tables, :parent => :iptables, :source =
   has_feature :dnat
   has_feature :interface_match
   has_feature :icmp_match
+  has_feature :owner
   has_feature :state_match
   has_feature :reject_type
   has_feature :log_level
@@ -20,6 +21,7 @@ Puppet::Type.type(:firewall).provide :ip6tables, :parent => :iptables, :source =
     :destination => "-d",
     :dport => "--dports",
     :icmp => "--icmpv6-type",
+    :gid => "--gid-owner",
     :iniface => "-i",
     :jump => "-j",
     :limit => "--limit",
@@ -27,6 +29,7 @@ Puppet::Type.type(:firewall).provide :ip6tables, :parent => :iptables, :source =
     :log_prefix => "--log-prefix",
     :name => "--comment",
     :outiface => "-o",
+    :port => '-m multiport --ports',
     :proto => "-p",
     :reject => "--reject-with",
     :source => "-s",
@@ -36,10 +39,15 @@ Puppet::Type.type(:firewall).provide :ip6tables, :parent => :iptables, :source =
     :todest => "--to-destination",
     :toports => "--to-ports",
     :tosource => "--to-source",
+    :uid => "--uid-owner",
   }
 
+  # This is the order of resources as they appear in iptables-save output,
+  # we need it to properly parse and apply rules, if the order of resource
+  # changes between puppet runs, the changed rules will be re-applied again.
+  # This order can be determined by going through iptables source code or just tweaking and trying manually
   @resource_list = [:table, :source, :destination, :iniface, :outiface,
-    :proto, :sport, :dport, :name, :state, :icmp, :limit, :burst, :jump,
+    :proto, :gid, :uid, :sport, :dport, :port, :name, :state, :icmp, :limit, :burst, :jump,
     :todest, :tosource, :toports, :log_level, :log_prefix, :reject]
 
   @singular_ports = {
@@ -57,6 +65,8 @@ Puppet::Type.type(:firewall).provide :ip6tables, :parent => :iptables, :source =
     :sport     => lambda { |v|
       return :multiport if v.to_a.length > 1
     },
+    :gid       => :owner,
+    :uid       => :owner,
   }
 
   @resources_by_arg = @resource_map.invert.merge(@singular_ports.invert)

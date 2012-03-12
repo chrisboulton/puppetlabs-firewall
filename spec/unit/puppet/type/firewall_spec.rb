@@ -74,7 +74,7 @@ describe firewall do
   end
 
   describe ':proto' do
-    [:tcp, :udp, :icmp, :esp, :ah, :vrrp, :igmp, :all].each do |proto|
+    [:tcp, :udp, :icmp, :esp, :ah, :vrrp, :igmp, :ipencap, :ospf, :all].each do |proto|
       it "should accept proto value #{proto}" do
         @resource[:proto] = proto
         @resource[:proto].should == proto
@@ -92,7 +92,7 @@ describe firewall do
       res.parameters[:jump].should == nil
     end
 
-    ['QUEUE', 'RETURN', 'DNAT', 'SNAT', 'LOG', 'MASQUERADE', 'REDIRECT'].each do |jump|
+    ['QUEUE', 'RETURN', 'DNAT', 'SNAT', 'LOG', 'MASQUERADE', 'REDIRECT', 'MARK'].each do |jump|
       it "should accept jump value #{jump}" do
         @resource[:jump] = jump
         @resource[:jump].should == jump
@@ -114,7 +114,7 @@ describe firewall do
     describe addr do
       it "should accept a #{addr} as a string" do
         @resource[addr] = '127.0.0.1'
-        @resource[addr].should == '127.0.0.1'
+        @resource[addr].should == '127.0.0.1/32'
       end
     end
   end
@@ -172,6 +172,35 @@ describe firewall do
       it "should accept #{addr} value as a string" do
         @resource[addr] = '127.0.0.1'
       end
+    end
+  end
+
+  describe ':log_level' do
+    values = {
+      'panic' => '0',
+      'alert' => '1',
+      'crit'  => '2',
+      'err'   => '3',
+      'warn'  => '4',
+      'warning' => '4',
+      'not'  => '5',
+      'notice' => '5',
+      'info' => '6',
+      'debug' => '7'
+    }
+
+    values.each do |k,v|
+      it {
+        @resource[:log_level] = k
+        @resource[:log_level].should == v
+      }
+
+      it {
+        @resource[:log_level] = 3
+        @resource[:log_level].should == 3
+      }
+
+      it { lambda { @resource[:log_level] = 'foo' }.should raise_error(Puppet::Error) }
     end
   end
 
@@ -245,6 +274,35 @@ describe firewall do
           :jump => "custom_chain"
         )
       }.should raise_error(Puppet::Error, /^Only one of the parameters 'action' and 'jump' can be set$/)
+    end
+  end
+  describe ':gid and :uid' do
+    it 'should allow me to set uid' do
+      @resource[:uid] = 'root'
+      @resource[:uid].should == ['root']
+    end
+    it 'should allow me to set uid as an array, breaking iptables' do
+      @resource[:uid] = ['root', 'bobby']
+      @resource[:uid].should == ['root', 'bobby']
+    end
+    it 'should allow me to set gid' do
+      @resource[:gid] = 'root'
+      @resource[:gid].should == ['root']
+    end
+    it 'should allow me to set gid as an array, breaking iptables' do
+      @resource[:gid] = ['root', 'bobby']
+      @resource[:gid].should == ['root', 'bobby']
+    end
+  end
+
+  describe ':set_mark' do
+    it 'should allow me to set set-mark' do
+      @resource[:set_mark] = '0x3e8'
+      @resource[:set_mark].should == '0x3e8'
+    end
+    it 'should convert int to hex' do
+      @resource[:set_mark] = '1000'
+      @resource[:set_mark].should == '0x3e8'
     end
   end
 end

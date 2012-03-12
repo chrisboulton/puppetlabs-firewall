@@ -1,25 +1,8 @@
-# Puppet Firewall Module
-#
-# Copyright (C) 2011 Bob.sh Limited
-# Copyright (C) 2008 Camptocamp Association
-# Copyright (C) 2007 Dmitri Priimak
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
 require 'socket'
+require 'resolv'
 require 'puppet/util/ipcidr'
 
+# Util module for puppetlabs-firewall
 module Puppet::Util::Firewall
   # Translate the symbolic names for icmp packet types to integers
   def icmp_name_to_number(value_icmp)
@@ -45,9 +28,32 @@ module Puppet::Util::Firewall
     end
   end
 
+  # Convert log_level names to their respective numbers
+  def log_level_name_to_number(value)
+    #TODO make this 0-7 only
+    if value =~ /\d/
+      value
+    else
+      case value
+        when "panic" then "0"
+        when "alert" then "1"
+        when "crit" then "2"
+        when "err" then "3"
+        when "error" then "3"
+        when "warn" then "4"
+        when "warning" then "4"
+        when "not" then "5"
+        when "notice" then "5"
+        when "info" then "6"
+        when "debug" then "7"
+        else nil
+      end
+    end
+  end
+
   # This method takes a string and attempts to convert it to a port number
   # if valid.
-  # 
+  #
   # If the string already contains a port number or perhaps a range of ports
   # in the format 22:1000 for example, it simply returns the string and does
   # nothing.
@@ -60,6 +66,14 @@ module Puppet::Util::Firewall
       end
     else
       Socket.getservbyname(value)
+    end
+  end
+
+  def host_to_ip(value)
+    begin
+      Puppet::Util::IPCidr.new(value).cidr
+    rescue
+      Puppet::Util::IPCidr.new(Resolv.getaddress(value)).cidr
     end
   end
 end

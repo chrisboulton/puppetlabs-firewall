@@ -4,6 +4,90 @@ Release notes for puppetlabs-firewall module.
 
 ---------------------------------------
 
+#### 0.0.4 - 2011/12/05
+
+This release adds two new parameters, 'uid' and 'gid'. As a part of the owner module, these params allow you to specify a uid, username, gid, or group got a match:
+
+    firewall { '497 match uid':
+      port => '123',
+      proto => 'mangle',
+      chain => 'OUTPUT',
+      action => 'drop'
+      uid => '123'
+    }
+
+This release also adds value munging for the 'log_level', 'source', and 'destination' parameters. The 'source' and 'destination' now support hostnames:
+
+    firewall { '498 accept from puppetlabs.com':
+      port => '123',
+      proto => 'tcp',
+      source => 'puppetlabs.com',
+      action => 'accept'
+    }
+
+
+The 'log_level' parameter now supports using log level names, such as 'warn', 'debug', and 'panic':
+
+    firewall { '499 logging':
+      port => '123',
+      proto => 'udp',
+      log_level => 'debug',
+      action => 'drop'
+    }
+
+Additional changes include iptables and ip6tables version facts, general whitespace cleanup, and adding additional unit tests.
+
+##### Changes
+
+* (#10957) add iptables_version and ip6tables_version facts
+* (#11093) Improve log_level property so it converts names to numbers
+* (#10723) Munge hostnames and IPs to IPs with CIDR
+* (#10718) Add owner-match support
+* (#10997) Add fixtures for ipencap
+* (#11034) Whitespace cleanup
+* (#10690) add port property support to ip6tables
+
+---------------------------------------
+
+#### 0.0.3 - 2011/11/12
+
+This release introduces a new parameter 'port' which allows you to set both
+source and destination ports for a match:
+
+    firewall { "500 allow NTP requests":
+      port => "123",
+      proto => "udp",
+      action => "accept",
+    }
+
+We also have the limit parameter finally working:
+
+    firewall { "500 limit HTTP requests":
+      dport => 80,
+      proto => tcp,
+      limit => "60/sec",
+      burst => 30,
+      action => accept,
+    }
+
+State ordering has been fixed now, and more characters are allowed in the
+namevar:
+
+* Alphabetical
+* Numbers
+* Punctuation
+* Whitespace
+
+##### Changes
+
+* (#10693) Ensure -m limit is added for iptables when using 'limit' param
+* (#10690) Create new port property
+* (#10700) allow additional characters in comment string
+* (#9082) Sort iptables --state option values internally to keep it consistent across runs
+* (#10324) Remove extraneous whitespace from iptables rule line in spec tests
+
+---------------------------------------
+
 #### 0.0.2 - 2011/10/26
 
 This is largely a maintanence and cleanup release, but includes the ability to
