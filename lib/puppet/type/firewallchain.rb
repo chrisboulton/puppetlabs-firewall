@@ -66,9 +66,6 @@ Puppet::Type.newtype(:firewallchain) do
             raise ArgumentError,'BROUTING is the only inbuilt chain allowed on on table \'broute\''
           end
         end  
-        if chain == 'BROUTING' && ( protocol != 'ethernet' || table!='BROUTE')
-          raise ArgumentError,'BROUTING is the only inbuilt chain allowed on on table \'BROUTE\' with protocol \'ethernet\' i.e. \'BROUTE:BROUTING:enternet\''
-        end
         if chain == 'BROUTING' && ( protocol != 'ethernet' || table!='broute')
           raise ArgumentError,'BROUTING is the only inbuilt chain allowed on on table \'BROUTE\' with protocol \'ethernet\' i.e. \'broute:BROUTING:enternet\''
         end
