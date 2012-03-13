@@ -245,6 +245,8 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
       end
     end
 
+    line.unshift("-t", properties[:table])
+
     # Return array without nils
     line.compact
   end
