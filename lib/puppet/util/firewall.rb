@@ -62,10 +62,10 @@ module Puppet::Util::Firewall
       if value.match(/^\d+(-\d+)?$/)
         return value
       else
-        return Socket.getservbyname(value).to_s
+        return Socket.getservbyname(value.to_s).to_s
       end
     else
-      Socket.getservbyname(value)
+      Socket.getservbyname(value.to_s)
     end
   end
 
