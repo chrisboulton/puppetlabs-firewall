@@ -129,7 +129,7 @@ Puppet::Type.type(:firewallchain).provide :iptables_chain do
       begin
         c[:save].call.each_line do |line|
           if line =~ c[:re] then
-            name = (table == 'filter' ? 'filter' : table) + ':' + $1 + ':' + p.to_s
+            name = $1 + ':' + (table == 'filter' ? 'filter' : table) + ':' + p.to_s
             policy = $2 == '-' ? nil : $2.downcase.to_sym
 
             chains << new({
@@ -154,8 +154,8 @@ Puppet::Type.type(:firewallchain).provide :iptables_chain do
 
   def allvalidchains
     @resource[:name].match(Nameformat)
-    table = $1
-    chain = $2
+    chain = $1
+    table = $2
     protocol = $3
     yield Mapping[protocol.to_sym][:tables],chain,table,protocol.to_sym
   end
