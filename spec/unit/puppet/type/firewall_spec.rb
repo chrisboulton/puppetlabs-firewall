@@ -298,11 +298,11 @@ describe firewall do
   describe ':set_mark' do
     it 'should allow me to set set-mark' do
       @resource[:set_mark] = '0x3e8'
-      @resource[:set_mark].should == '0x3e8'
+      @resource[:set_mark].should == '0x3e8/0xffffffff'
     end
     it 'should convert int to hex' do
       @resource[:set_mark] = '1000'
-      @resource[:set_mark].should == '0x3e8'
+      @resource[:set_mark].should == '0x3e8/0xffffffff'
     end
   end
 end

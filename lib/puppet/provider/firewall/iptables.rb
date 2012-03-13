@@ -49,7 +49,7 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
     :toports => "--to-ports",
     :tosource => "--to-source",
     :uid => "--uid-owner",
-    :set_mark => "--set-mark",
+    :set_mark => "--set-xmark",
   }
 
   # This is the order of resources as they appear in iptables-save output,

@@ -170,7 +170,7 @@ ARGS_TO_HASH = {
     },
   },
   'mark_set-mark' => {
-    :line => '-t mangle -A PREROUTING -j MARK --set-mark 1000',
+    :line => '-t mangle -A PREROUTING -j MARK --set-xmark 1000',
     :table => 'mangle',
     :params => {
       :jump     => 'MARK',
@@ -366,6 +366,6 @@ HASH_TO_ARGS = {
       :chain    => 'PREROUTING',
       :set_mark => '1000',
     },
-    :args => ['-t', :mangle, '-p', :tcp, '-m', 'comment', '--comment', '058 set-mark 1000', '-j', 'MARK', '--set-mark', '0x3e8'],
+    :args => ['-t', :mangle, '-p', :tcp, '-m', 'comment', '--comment', '058 set-mark 1000', '-j', 'MARK', '--set-xmark', '0x3e8/0xffffffff'],
   },
 }

@@ -447,13 +447,31 @@ Puppet::Type.newtype(:firewall) do
       Set the Netfilter mark value associated with the packet.
     EOS
 
+    validate do |value|
+      value.to_s.split("/").each do |v|
+        unless v.match(/^0x[[:xdigit:]]+$/) or v.match(/^\d+$/)
+          self.fail "%s is not a valid mark/mask combination" % value.to_s
+        end
+      end
+    end
+
     munge do |value|
       if ! value.to_s.include?("0x")
         "0x" + value.to_i.to_s(16)
       else
         super(value)
       end
-    end
+      (mark, mask) = value.to_s.split("/").map { |v|
+        if v[0..1].to_s != '0x'
+          v.to_i
+        else
+          v.hex
+        end
+      }
+      mask = 0xffffffff unless mask
+      mask = mark | mask
+      sprintf("0x%x/0x%x", mark, mask)
+     end
   end
 
   newparam(:line) do
