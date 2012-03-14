@@ -314,7 +314,7 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
 
     # Find list of current rules based on chain
     self.class.instances.each do |rule|
-      rules << rule.name if rule.chain == resource[:chain].to_s
+      rules << rule.name if rule.chain == resource[:chain].to_s and rule.table == resource[:table].to_s
     end
 
     # No rules at all? Just bail now.
