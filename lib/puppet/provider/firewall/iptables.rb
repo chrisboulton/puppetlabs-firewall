@@ -294,7 +294,7 @@ Puppet::Type.type(:firewall).provide :iptables, :parent => Puppet::Provider::Fir
       # expects hyphens for ranges of ports.
       if [:sport, :dport, :port].include?(res) then
         resource_value = resource_value.collect do |elem|
-          elem.gsub(/-/, ':')
+          elem.to_s.gsub(/-/, ':')
         end
       end
 
