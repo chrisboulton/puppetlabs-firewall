@@ -15,6 +15,10 @@ Puppet::Type.newtype(:firewall) do
   @doc = <<-EOS
     This type provides the capability to manage firewall rules within
     puppet.
+
+    **Autorequires:** If Puppet is managing the iptables or ip6tables chains
+    specified in the `chain` or `jump` parameters, the firewall resource
+    will autorequire those firewallchain resources.
   EOS
 
   feature :rate_limiting, "Rate limiting features."
@@ -28,6 +32,8 @@ Puppet::Type.newtype(:firewall) do
   feature :log_level, "The ability to control the log level"
   feature :log_prefix, "The ability to add prefixes to log messages"
   feature :mark, "Set the netfilter mark value associated with the packet"
+  feature :tcp_flags, "The ability to match on particular TCP flag settings"
+  feature :pkttype, "Match a packet type"
 
   # provider specific features
   feature :iptables, "The provider provides iptables features."
@@ -125,7 +131,7 @@ Puppet::Type.newtype(:firewall) do
     EOS
 
     munge do |value|
-      @resource.string_to_port(value)
+      @resource.string_to_port(value, :proto)
     end
 
     def is_to_s(value)
@@ -155,7 +161,7 @@ Puppet::Type.newtype(:firewall) do
     EOS
 
     munge do |value|
-      @resource.string_to_port(value)
+      @resource.string_to_port(value, :proto)
     end
 
     def is_to_s(value)
@@ -185,7 +191,7 @@ Puppet::Type.newtype(:firewall) do
     EOS
 
     munge do |value|
-      @resource.string_to_port(value)
+      @resource.string_to_port(value, :proto)
     end
 
     def is_to_s(value)
@@ -204,9 +210,25 @@ Puppet::Type.newtype(:firewall) do
       *tcp*.
     EOS
 
-    newvalues(:tcp, :udp, :icmp, :"ipv6-icmp", :esp, :ah, :vrrp, :igmp, :ipencap, :ospf, :all)
+    newvalues(:tcp, :udp, :icmp, :"ipv6-icmp", :esp, :ah, :vrrp, :igmp, :ipencap, :ospf, :gre, :all)
     defaultto "tcp"
   end
+
+  # tcp-specific
+  newproperty(:tcp_flags, :required_features => :tcp_flags) do
+    desc <<-EOS
+      Match when the TCP flags are as specified.
+      Is a string with a list of comma-separated flag names for the mask,
+      then a space, then a comma-separated list of flags that should be set.
+      The flags are: SYN ACK FIN RST URG PSH ALL NONE
+      Note that you specify them in the order that iptables --list-rules
+      would list them to avoid having puppet think you changed the flags.
+      Example: FIN,SYN,RST,ACK SYN matches packets with the SYN bit set and the
+	       ACK,RST and FIN bits cleared.  Such packets are used to request
+               TCP  connection initiation.
+    EOS
+  end
+
 
   # Iptables specific
   newproperty(:chain, :required_features => :iptables) do
@@ -291,14 +313,14 @@ Puppet::Type.newtype(:firewall) do
     desc <<-EOS
       Input interface to filter on.
     EOS
-    newvalues(/^[a-zA-Z0-9\-_]+$/)
+    newvalues(/^[a-zA-Z0-9\-\._\+]+$/)
   end
 
   newproperty(:outiface, :required_features => :interface_match) do
     desc <<-EOS
       Output interface to filter on.
     EOS
-    newvalues(/^[a-zA-Z0-9\-_]+$/)
+    newvalues(/^[a-zA-Z0-9\-\._\+]+$/)
   end
 
   # NAT specific properties
@@ -362,11 +384,32 @@ Puppet::Type.newtype(:firewall) do
   newproperty(:icmp, :required_features => :icmp_match) do
     desc <<-EOS
       When matching ICMP packets, this is the type of ICMP packet to match.
+
+      A value of "any" is not supported. To achieve this behaviour the
+      parameter should simply be omitted or undefined.
     EOS
+
+    validate do |value|
+      if value == "any"
+        raise ArgumentError,
+          "Value 'any' is not valid. This behaviour should be achieved " \
+          "by omitting or undefining the ICMP parameter."
+      end
+    end
 
     munge do |value|
       if value.kind_of?(String)
-        value = @resource.icmp_name_to_number(value)
+        # ICMP codes differ between IPv4 and IPv6.
+        case @resource[:provider]
+        when :iptables
+          protocol = 'inet'
+        when :ip6tables
+          protocol = 'inet6'
+        else
+          self.fail("cannot work out protocol family")
+        end
+
+        value = @resource.icmp_name_to_number(value, protocol)
       else
         value
       end
@@ -396,7 +439,7 @@ Puppet::Type.newtype(:firewall) do
     # States should always be sorted. This normalizes the resource states to
     # keep it consistent with the sorted result from iptables-save.
     def should=(values)
-      @should = super(values).sort
+      @should = super(values).sort_by {|sym| sym.to_s}
     end
 
     def is_to_s(value)
@@ -426,7 +469,7 @@ Puppet::Type.newtype(:firewall) do
     newvalue(/^\d+$/)
   end
 
-  newproperty(:uid, :array_matching =>:all, :required_features => :owner) do
+  newproperty(:uid, :required_features => :owner) do
     desc <<-EOS
       UID or Username owner matching rule.  Accepts a string argument
       only, as iptables does not accept multiple uid in a single
@@ -434,7 +477,7 @@ Puppet::Type.newtype(:firewall) do
     EOS
   end
 
-  newproperty(:gid, :array_matching =>:all, :required_features => :owner) do
+  newproperty(:gid, :required_features => :owner) do
     desc <<-EOS
       GID or Group owner matching rule.  Accepts a string argument
       only, as iptables does not accept multiple gid in a single
@@ -444,40 +487,75 @@ Puppet::Type.newtype(:firewall) do
 
   newproperty(:set_mark, :required_features => :mark) do
     desc <<-EOS
-      Set the Netfilter mark value associated with the packet.
+      Set the Netfilter mark value associated with the packet.  Accepts either of:
+      mark/mask or mark.  These will be converted to hex if they are not already.
     EOS
 
-    validate do |value|
-      value.to_s.split("/").each do |v|
-        unless v.match(/^0x[[:xdigit:]]+$/) or v.match(/^\d+$/)
-          self.fail "%s is not a valid mark/mask combination" % value.to_s
-        end
-      end
-    end
-
     munge do |value|
-      if ! value.to_s.include?("0x")
-        "0x" + value.to_i.to_s(16)
-      else
-        super(value)
+      int_or_hex = '[a-fA-F0-9x]'
+      match = value.to_s.match("(#{int_or_hex}+)(/)?(#{int_or_hex}+)?")
+      mark = @resource.to_hex32(match[1])
+
+      # Values that can't be converted to hex.
+      # Or contain a trailing slash with no mask.
+      if mark.nil? or (mark and match[2] and match[3].nil?)
+        raise ArgumentError, "MARK value must be integer or hex between 0 and 0xffffffff"
       end
-      (mark, mask) = value.to_s.split("/").map { |v|
-        if v[0..1].to_s != '0x'
-          v.to_i
+
+      # Old iptables does not support a mask. New iptables will expect one.
+      iptables_version = Facter.fact('iptables_version').value
+      mask_required = (iptables_version and Puppet::Util::Package.versioncmp(iptables_version, '1.4.1') >= 0)
+
+      if mask_required
+        if match[3].nil?
+          value = "#{mark}/0xffffffff"
         else
-          v.hex
+          mask = @resource.to_hex32(match[3])
+          if mask.nil?
+            raise ArgumentError, "MARK mask must be integer or hex between 0 and 0xffffffff"
+          end
+          value = "#{mark}/#{mask}"
         end
-      }
-      mask = 0xffffffff unless mask
-      mask = mark | mask
-      sprintf("0x%x/0x%x", mark, mask)
-     end
+      else
+        unless match[3].nil?
+          raise ArgumentError, "iptables version #{iptables_version} does not support masks on MARK rules"
+        end
+        value = mark
+      end
+      value
+    end
+  end
+
+  newproperty(:pkttype, :required_features => :pkttype) do
+    desc <<-EOS
+      Sets the packet type to match.
+    EOS
+
+    newvalues(:unicast, :broadcast, :multicast)
   end
 
   newparam(:line) do
     desc <<-EOS
       Read-only property for caching the rule line.
     EOS
+  end
+
+  autorequire(:firewallchain) do
+    case value(:provider)
+    when :iptables
+      protocol = "IPv4"
+    when :ip6tables
+      protocol = "IPv6"
+    else
+      return
+    end
+
+    reqs = []
+    [value(:chain), value(:jump)].each do |chain|
+      reqs << "#{chain}:#{value(:table)}:#{protocol}" unless chain.nil?
+    end
+
+    reqs
   end
 
   validate do
@@ -540,10 +618,10 @@ Puppet::Type.newtype(:firewall) do
 
     if value(:set_mark)
       unless value(:jump).to_s  =~ /MARK/ &&
-             value(:chain).to_s =~ /PREROUTING/ &&
+             value(:chain).to_s =~ /PREROUTING|OUTPUT/ &&
              value(:table).to_s =~ /mangle/
         self.fail "Parameter set_mark only applies to " \
-          "the PREROUTING chain of the mangle table and when jump => MARK"
+          "the PREROUTING or OUTPUT chain of the mangle table and when jump => MARK"
       end
     end
 

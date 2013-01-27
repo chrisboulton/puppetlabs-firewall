@@ -1,5 +1,7 @@
 ## puppetlabs-firewall module
 
+[![Build Status](https://travis-ci.org/puppetlabs/puppetlabs-firewall.png?branch=master)](https://travis-ci.org/puppetlabs/puppetlabs-firewall)
+
 ## User Guide
 
 ### Overview
@@ -74,12 +76,91 @@ need to run Puppet on the master first:
 You may also need to restart Apache, although this shouldn't always be the
 case.
 
+### Recommended Setup
+
+At the moment you need to provide some setup outside of what we provide in the 
+module to support proper ordering, purging and firewall peristence.
+
+So It is recommended that you provide the following in top scope somewhere
+(such as your site.pp):
+
+    # Always persist firewall rules
+    exec { 'persist-firewall':
+      command     => $operatingsystem ? {
+        'debian'          => '/sbin/iptables-save > /etc/iptables/rules.v4',
+        /(RedHat|CentOS)/ => '/sbin/iptables-save > /etc/sysconfig/iptables',
+      },
+      refreshonly => true,
+    }
+
+    # These defaults ensure that the persistence command is executed after 
+    # every change to the firewall, and that pre & post classes are run in the
+    # right order to avoid potentially locking you out of your box during the
+    # first puppet run.
+    Firewall {
+      notify  => Exec['persist-firewall'],
+      before  => Class['my_fw::post'],
+      require => Class['my_fw::pre'],
+    }
+    Firewallchain {
+      notify  => Exec['persist-firewall'],
+    }
+    
+    # Purge unmanaged firewall resources
+    #
+    # This will clear any existing rules, and make sure that only rules
+    # defined in puppet exist on the machine
+    resources { "firewall":
+      purge => true
+    }
+
+In this case, it uses classes called 'my_fw::pre' & 'my_fw::post' to define
+default pre and post rules. These rules are required to run in catalog order
+to avoid locking yourself out of your own boxes when Puppet runs, as
+the firewall class applies rules as it processes the catalog.
+
+An example of the pre class would be:
+
+    # This would be located in my_fw/manifests/pre.pp
+    class my_fw::pre {
+      Firewall {
+        require => undef,
+      }
+    
+      # Default firewall rules
+      firewall { '000 accept all icmp':
+        proto   => 'icmp',
+        action  => 'accept',
+      }->
+      firewall { '001 accept all to lo interface':
+        proto   => 'all',
+        iniface => 'lo',
+        action  => 'accept',
+      }->
+      firewall { '002 accept related established rules':
+        proto   => 'all',
+        state   => ['RELATED', 'ESTABLISHED'],
+        action  => 'accept',
+      }
+    }
+
+And an example of a post class:
+
+    # This would be located in my_fw/manifests/post.pp:
+    class my_fw::post {
+      firewall { '999 drop all':
+        proto   => 'all',
+        action  => 'drop',
+        before  => undef,
+      }
+    }
+
 ### Examples
 
 Basic accept ICMP request example:
 
     firewall { "000 accept all icmp requests":
-      proto => "icmp",
+      proto  => "icmp",
       action => "accept",
     }
 
@@ -92,12 +173,12 @@ Drop all:
 Source NAT example (perfect for a virtualization host):
 
     firewall { '100 snat for network foo2':
-      chain  => 'POSTROUTING',
-      jump   => 'MASQUERADE',
-      proto  => 'all',
+      chain    => 'POSTROUTING',
+      jump     => 'MASQUERADE',
+      proto    => 'all',
       outiface => "eth0",
-      source => ['10.1.2.0/24'],
-      table  => 'nat',
+      source   => ['10.1.2.0/24'],
+      table    => 'nat',
     }
 
 Creating a new rule that forwards to a chain, then adding a rule to this chain:
@@ -105,7 +186,6 @@ Creating a new rule that forwards to a chain, then adding a rule to this chain:
     firewall { '100 forward to MY_CHAIN':
       chain   => 'INPUT',
       jump    => 'MY_CHAIN',
-      require => Firewallchain["filter:MY_CHAIN:IPv4"],
     }
     # The namevar here is in the format chain_name:table:protocol
     firewallchain { 'MY_CHAIN:filter:IPv4':
@@ -118,39 +198,6 @@ Creating a new rule that forwards to a chain, then adding a rule to this chain:
       dport   => 5000,
     }
 
-You can make firewall rules persistent with the following iptables example:
-
-    exec { "persist-firewall":
-      command => $operatingsystem ? {
-        "debian" => "/sbin/iptables-save > /etc/iptables/rules.v4",
-        /(RedHat|CentOS)/ => "/sbin/iptables-save > /etc/sysconfig/iptables",
-      }
-      refreshonly => true,
-    }
-    Firewall {
-      notify => Exec["persist-firewall"]
-    }
-    Firewallchain {
-      notify => Exec["persist-firewall"]
-    }
-
-If you wish to ensure any reject rules are executed last, try using stages.
-The following example shows the creation of a class which is where your
-last rules should run, this however should belong in a puppet module.
-
-    class my_fw::drop {
-      iptables { "999 drop all":
-        action => "drop"
-      }
-    }
-
-    stage { pre: before => Stage[main] }
-    stage { post: require => Stage[main] }
-
-    class { "my_fw::drop": stage => "post" }
-
-By placing the 'my_fw::drop' class in the post stage it will always be inserted
-last thereby avoiding locking you out before the accept rules are inserted.
 
 ### Further documentation
 
@@ -173,6 +220,17 @@ Or:
 Bugs can be reported in the Puppetlabs Redmine project:
 
     <http://projects.puppetlabs.com/projects/modules/>
+
+Please note, we only aim support for the following distributions and versions:
+
+* Redhat 5.8 or greater
+* Debian 6.0 or greater
+* Ubuntu 11.04 or greater
+
+If you want a new distribution supported feel free to raise a ticket and we'll
+consider it. If you want an older revision supported we'll also consider it,
+but don't get insulted if we reject it. Specifically, we will not consider
+Redhat 4.x support - its just too old.
 
 ## Developer Guide
 

@@ -32,16 +32,6 @@ describe 'iptables provider detection' do
     })
     resource.provider.class.to_s.should == "Puppet::Type::Firewall::ProviderIptables"
   end
-
-  it "should raise a default provider error when there are no commands" do
-    # Stub all commands lookups so they return nothing 
-    exists.any_instance.stubs(:which).returns false
-
-    # Instantiate a resource instance and make sure it raises an exception
-    lambda { resource = Puppet::Type.type(:firewall).new({ 
-      :name => '000 test foo' }) }.should raise_error(Puppet::DevError, 
-      "Could not find a default provider for firewall")
-  end
 end
 
 describe 'iptables provider' do
@@ -56,16 +46,27 @@ describe 'iptables provider' do
   before :each do
     Puppet::Type::Firewall.stubs(:defaultprovider).returns provider
     provider.stubs(:command).with(:iptables_save).returns "/sbin/iptables-save"
-  end
-  
-  it 'should be able to get a list of existing rules' do
-    # Pretend to return nil from iptables
-    provider.expects(:execute).with(['/sbin/iptables-save']).returns("")
 
+    # Stub iptables version
+    Facter.fact(:iptables_version).stubs(:value).returns("1.4.2")
+
+    Puppet::Util::Execution.stubs(:execute).returns ""
+    Puppet::Util.stubs(:which).with("/sbin/iptables-save").
+      returns "/sbin/iptables-save"
+  end
+
+  it 'should be able to get a list of existing rules' do
     provider.instances.each do |rule|
       rule.should be_instance_of(provider)
       rule.properties[:provider].to_s.should == provider.name.to_s
     end
+  end
+
+  it 'should ignore lines with fatal errors' do
+    Puppet::Util::Execution.stubs(:execute).with(['/sbin/iptables-save']).
+      returns("FATAL: Could not load /lib/modules/2.6.18-028stab095.1/modules.dep: No such file or directory")
+
+    provider.instances.length.should == 0
   end
 
   # Load in ruby hash for test fixtures.
@@ -79,7 +80,7 @@ describe 'iptables provider' do
         # If this option is enabled, make sure the parameters exactly match
         if data[:compare_all] then
           it "the parameter hash keys should be the same as returned by rules_to_hash" do
-            resource.keys.sort.should == data[:params].keys.sort
+            resource.keys.should =~ data[:params].keys
           end
         end
 
@@ -122,10 +123,6 @@ describe 'iptables provider' do
   describe 'when creating resources' do
     let(:instance) { provider.new(resource) }
 
-    before :each do
-      provider.expects(:execute).with(['/sbin/iptables-save']).returns("")
-    end
-
     it 'insert_args should be an array' do
       instance.insert_args.class.should == Array
     end
@@ -133,10 +130,6 @@ describe 'iptables provider' do
 
   describe 'when modifying resources' do
     let(:instance) { provider.new(resource) }
-
-    before :each do
-      provider.expects(:execute).with(['/sbin/iptables-save']).returns ""
-    end
 
     it 'update_args should be an array' do
       instance.update_args.class.should == Array
@@ -159,7 +152,8 @@ describe 'iptables provider' do
     end
 
     it 'delete_args is the same as the rule string when joined' do
-      instance.delete_args.join(' ').should == sample_rule.gsub(/\-A/, '-D')
+      instance.delete_args.join(' ').should == sample_rule.gsub(/\-A/,
+        '-t filter -D')
     end
   end
 end
